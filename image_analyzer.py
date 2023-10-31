@@ -180,11 +180,11 @@ def knn(path, n):
             data.append(p)
 
     sorted_objects = sorted(data, key=lambda x: x.distance)
-    for p in range(0, n+1):
+    for p in range(0, n):
         print(sorted_objects[p])
 
 #train()
-knn('captured_images/test/image_0.png', 10)
+knn('captured_images/test/image_0.png', 5)
 
 
 
