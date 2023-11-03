@@ -4,6 +4,7 @@ import os
 import serial
 import os
 import math
+import time
 
 class data_point:
     def __init__(self, name):
@@ -46,7 +47,7 @@ def calculate_part_area(image_path):
                     b, g, r = subtracted_image[i, j]
                     if b > 15 and g > 15 and r > 15:
                         non_black_pixel_count += 1
-                        subtracted_image[i, j] = (0, 55, 0)
+                        subtracted_image[i, j] = (0, 100, 0)
             
             
             cv2.imwrite('subtracted_image.jpg', subtracted_image)
@@ -79,8 +80,8 @@ def edge_detection(image_path):
         image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
         
         median = np.median(image)
-        low_threshold = int(max(0, (1.0 - 0.4) * median))
-        high_threshold = int(min(255, (1.0 + 0.4) * median))
+        low_threshold = int(max(0, (0) * median))
+        high_threshold = int(min(255, (2) * median))
         edges = cv2.Canny(image, low_threshold, high_threshold)
         non_black_pixel_count = 0
         for i in range(edges.shape[0]):
@@ -143,19 +144,19 @@ def get_part_descriptors(image_path):
     return_string += str(int(count_edges_in_image(image_path)/100))
     return return_string
 
-def train(): 
+def train():
     directory = 'captured_images'
     part_names = []
     for filename in os.scandir(directory):
         if filename.is_dir():
             print(filename.path)
-            if(filename.path=="test"):
-                continue
             p = filename.path.split('\\')
             part_names.append(p[len(p)-1])
 
     with open("output.txt", "w") as file:
         for part_class in part_names:
+            if part_class=="test":
+                continue
             for image in os.scandir('captured_images/'+part_class):
                 if image.is_file():
                     row_string = part_class + " " + get_part_descriptors(str(image.path))
@@ -163,29 +164,78 @@ def train():
                     print(row_string)
         file.close()
 
-
+def crop_image(image, x1, y1, x2, y2):
+    cropped_image = image[y1:y2, x1:x2]
+    return cropped_image
 
 def knn(path, n):
     
     d = data_point("test")
     d.load_attributes_from_file(path)
     data = [d]
-
+    line_count = 0
     with open("output.txt", "r") as file:
         for line in file:
+            line_count+=1
             line = line.replace("\n","")
             p = data_point(line.split(" ")[0])
             p.load_attributes(line.split(" ")[1:len(line)])
             p.calculate(d.attributes)
             data.append(p)
-
-    sorted_objects = sorted(data, key=lambda x: x.distance)
+    if(n==0):
+        n=int(math.sqrt(line_count))
+    sorted_objects = sorted(data, key=lambda x: x.distance)[0:n]
+    sorted_objects = sorted(sorted_objects, key=lambda x: x.name)
+    name_dict = {}  # Use a dictionary instead of a list
     for p in range(0, n):
-        print(sorted_objects[p])
+        #print(sorted_objects[p])
+        if sorted_objects[p].name in name_dict:
+            name_dict[sorted_objects[p].name] += 1
+        else:
+            name_dict[sorted_objects[p].name] = 1
+    sorted_name_dict = dict(sorted(name_dict.items(), key=lambda item: item[1], reverse=True))
+    print(sorted_name_dict)
 
+
+
+def detect():
+    output_directory = 'captured_images/temp'
+    os.makedirs(output_directory, exist_ok=True)
+    cam_port = 0
+    cam = cv2.VideoCapture(cam_port)
+    ser = serial.Serial(port="COM17", baudrate=9600)
+    data = 'a'
+    ser.write(data.encode())
+    time.sleep(5)
+    print("pucture")
+    result, image = cam.read()
+    if result:
+        data = 'a'
+        ser.write(data.encode())
+        time.sleep(3)
+        # Crop the image
+        height, width, _ = image.shape
+        size = 470
+
+        x = (width - size) // 2
+        y = (height - size) // 2
+
+        #cv.rectangle(image, (x, y), (x + size, y + size), (0, 255, 0), thickness=2)
+
+        cropped_image = crop_image(image, x,y,x + size, y + size)
+
+        # Save the cropped image
+        image_filename = os.path.join(output_directory, f'temp.png')
+        cv2.imwrite(image_filename, cropped_image)
+    cam.release()
+    ser.close()
+    knn(output_directory+'/temp.png', 0)
+
+detect()
 #train()
-knn('captured_images/test/image_0.png', 5)
 
+#knn('captured_images/test/M2x8mm.png', 0)
+#edge_detection('captured_images/test/image_1.png')
 
 
 
